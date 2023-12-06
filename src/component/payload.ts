@@ -1,7 +1,37 @@
-import {ServiceResponse} from "./Model.ts";
+import { ServiceResponse } from "./Model.ts";
+import axios from "axios";
+
+export const getPayloadApi = async () => {
+  try {
+    const url = `https://10.99.0.4/api/v1/tools/export/QueryToJson?orient=list`;
+    const config = {
+      headers: {
+        // "Accept-Encoding": "gzip",
+        "Content-Type": "application/json",
+      },
+    };
+
+    const body = {
+      payload: {
+        source: {
+          config:
+            "iNONAOVM/2TwTyH9zVk2fP+vPoEMri7emyMGuJb3uOKKWX6kOS+X0p8vRpJ7yKNEq0KU0EEQlTJ1CE0WdMtdtcYYFYc1LKajUpIGkHzXriadxyhR1YEhAnuWIHsd86hbCPrQ9vkov1Ld4U4FZrzLYv+NcnILh0R02Fe7bBkHZmtZB4nNwA7ruFZtAJGXnUMan/z0YFGx8lDQesoDkgMBBJjEOB7YJmfoAxHsHx8v1Yj2VN4o2BzyJuj3f1WJH45RwpE4PJxBxPLTKJlTMyXkOg==",
+          type: "MSSQL",
+          query:
+            "SELECT TOP 10 * FROM DWH_ABCS_M_CFMAST.DBO.ABCS_M_CFMAST_20230330",
+        },
+      },
+    };
+
+    const res = await axios.post(url, body, config);
+    return res.data;
+  } catch (err) {
+    return err;
+  }
+};
 
 export async function getPayload(): Promise<ServiceResponse> {
-    return JSON.parse(`
+  return JSON.parse(`
 {
   "data": {
     "payload": {
@@ -19112,5 +19142,5 @@ export async function getPayload(): Promise<ServiceResponse> {
     }
   }
 }
-`)
+`);
 }
