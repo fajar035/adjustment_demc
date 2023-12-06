@@ -20,20 +20,16 @@ export class RevertMenuOption implements MenuOption {
         if (this.onChangeHandler == null) return;
 
         const changes = selectedRanges.flat().map((cell) => {
-            const originalValue = this.changeList
+            const originalCell = this.changeList
                 .find((change) => change.row['__index__'] === cell.rowId)
                 ?.columns.find((column) => column.title === cell.columnId)
-                ?.original
 
-            if (originalValue == null) return null;
+            if (originalCell == null) return null;
 
             return {
                 rowId: cell.rowId,
                 columnId: cell.columnId,
-                newCell: {
-                    type: "text",
-                    text: originalValue
-                }
+                newCell: {type: "text", text: originalCell.original}
             }
         }).filter((change) => change != null) as any[];
 

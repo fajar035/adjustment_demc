@@ -1,9 +1,9 @@
 import * as React from "react";
 import {useEffect} from "react";
-import {CellChange, Column, Id, MenuOption, ReactGrid, Row, SelectionMode, TextCell} from "@silevis/reactgrid";
+import {Cell, CellChange, Column, HeaderCell, Id, MenuOption, ReactGrid, Row, SelectionMode, TextCell} from "@silevis/reactgrid";
 import "@silevis/reactgrid/styles.css";
 import {getPayload} from "./payload.ts";
-import {ServiceResponse} from "./Model.ts";
+import {Field, ServiceResponse} from "./Model.ts";
 import hash from "object-hash";
 import {SetNullMenuOption} from "./SetNullMenuOption.tsx";
 import {RevertMenuOption} from "./RevertMenuOption.tsx";
@@ -22,43 +22,71 @@ function getObjects(columns: any[], records: any[]): any[] {
     });
 }
 
-function getColumns(columns: any[]): Column[] {
+function getSheetColumns(columns: { name: string }[]): Column[] {
     return columns.map((column: any) => ({columnId: column.name, width: 150}));
 }
 
-function getSheetRows(columns: any[], records: any[], changeList: ChangeItem[]): Row[] {
-    return [
-        {
-            rowId: "header",
-            cells: columns.map((field) => ({type: "text", text: field.name, nonEditable: true}))
-        },
-        ...records.map<Row>((rows, index: number): Row => {
-            const rowChanges: ChangeItem | undefined = changeList.find((change) => change.row['__index__'] === index);
+function getHeaderRow(columns: any[]): Row<Cell> {
+    return {
+        rowId: "header",
+        cells: columns.map((column) => getHeaderCell(column.name))
+    }
+}
 
-            const cells: TextCell[] = columns.map((field): TextCell => {
-                const value = rows[field.name];
-                const columnChange = rowChanges?.columns.find((column) => column.title === field.name);
+function getHeaderCell(value: any | null): HeaderCell {
+    return {
+        type: "header",
+        text: value == null ? "" : value.toString(),
+        nonEditable: true,
+        style: {
+            color: "black",
+            background: "lightgray"
+        }
+    }
+}
 
-                const color: string = value == null ? "lightgray" : "black";
-                let backgroundColor: string | undefined = undefined
 
-                if (columnChange != null) backgroundColor = "blue";
-                else if (rowChanges != null) backgroundColor = "lightblue";
+function getTextCell(
+    value: any | null,
+    isRowChanged: boolean = false,
+    isCellChanged: boolean = false,
+): TextCell {
+    const color = value == null ? "lightgray" : "black";
+    let backgroundColor: string | undefined = undefined
 
-                return {
-                    type: "text",
-                    text: value == null ? "" : value.toString(),
-                    placeholder: value == null ? "NULL" : value.toString(),
-                    style: {
-                        color: color,
-                        background: backgroundColor
-                    }
-                }
-            })
+    if (isCellChanged) backgroundColor = "blue";
+    else if (isRowChanged) backgroundColor = "lightblue";
 
-            return ({rowId: index, cells: cells})
+    return {
+        type: "text",
+        text: value == null ? "" : value.toString(),
+        placeholder: value == null ? "NULL" : value.toString(),
+        style: {
+            color: color,
+            background: backgroundColor
+        }
+    }
+}
+
+function getValueRow(index: number, columns: any[], values: any[], change: ChangeItem | undefined): Row<Cell> {
+    return {
+        rowId: index,
+        cells: columns.map((field): Cell => {
+            const columnChange = change?.columns.find((column) => column.title === field.name);
+            return getTextCell(values[field.name], change != null, columnChange != null)
         })
-    ];
+    }
+}
+
+function getValueRows(columns: any[], values: any[][], changes: ChangeItem[]): Row<Cell>[] {
+    return values.map((row, index: number) => {
+        const change: ChangeItem | undefined = changes.find((change) => change.row['__index__'] === index);
+        return getValueRow(index, columns, row, change)
+    })
+}
+
+function getSheetValues(columns: { name: string }[], values: any[], changes: ChangeItem[]): Row<Cell>[] {
+    return [getHeaderRow(columns), ...getValueRows(columns, values, changes)];
 }
 
 function applyChangesToRow(changes: CellChange<TextCell>[], rows: any[]): any[] {
@@ -78,36 +106,32 @@ function getChangeHandler(cellChanges: CellChange<TextCell>[]): void {
 }
 
 export const AdjustmentPage = () => {
-    const [payload, setPayload] = React.useState<ServiceResponse>({data: {payload: {fields: [], records: []}}});
+    const [columns, setColumns] = React.useState<Field[]>([])
+
     const [objects, setObjects] = React.useState<any[]>([]);
-    const [rows, setRows] = React.useState<Row[]>([]);
+    const [rows, setSheetValues] = React.useState<Row<Cell>[]>([]);
     const [availableColumns, setAvailableColumns] = React.useState<string[]>([]);
-    const [columns, setColumns] = React.useState<Column[]>([]);
+    const [sheetColumns, setSheetColumns] = React.useState<Column[]>([]);
     const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
     const [changeList, setChangeList] = React.useState<ChangeItem[]>([]);
 
 
     useEffect(() => {
         getPayload().then((payload) => {
-            setPayload(payload);
-            const objects = getObjects(payload.data.payload.fields, payload.data.payload.records)
-            setObjects(objects);
+            setColumns(payload.data.payload.fields)
+            setAvailableColumns(payload.data.payload.fields.map((field) => field.name));
+            setObjects(getObjects(payload.data.payload.fields, payload.data.payload.records));
         })
     }, [])
 
     useEffect(() => {
-        setAvailableColumns(payload.data.payload.fields.map((field) => field.name));
+        const filteredColumns = selectedColumns.length === 0 ? columns : columns.filter((field) => selectedColumns.includes(field.name));
+        const sheetColumns = getSheetColumns(filteredColumns);
+        const sheetValues = getSheetValues(filteredColumns, objects, changeList);
 
-        let filteredColumns = payload.data.payload.fields.filter((field) => selectedColumns.includes(field.name));
-
-        if (selectedColumns.length === 0) filteredColumns = payload.data.payload.fields;
-
-        const columns = getColumns(filteredColumns);
-        const rows = getSheetRows(filteredColumns, objects, changeList);
-
-        setColumns(columns);
-        setRows(rows);
-    }, [objects, selectedColumns, changeList])
+        setSheetColumns(sheetColumns);
+        setSheetValues(sheetValues);
+    }, [columns, objects, selectedColumns, changeList])
 
     const handleChanges: any = (changes: CellChange<TextCell>[]) => {
         const object = [...objects];
@@ -118,58 +142,37 @@ export const AdjustmentPage = () => {
         }))
 
         _changes = _changes.filter((change, index, self) =>
-                index === self.findIndex((t) => (
-                    t.index === change.index && t.column === change.column
-                ))
+            index === self.findIndex((t) => t.index === change.index && t.column === change.column)
         )
 
 
         let newObjectChanges = [...changeList];
 
         const originalObjects = _changes.map((change) => ({...objects[change.index]}))
-        console.log("_Changes : ", _changes)
-        console.log("Original Objects : ", originalObjects)
         applyChangesToRow(changes, object);
 
         _changes.forEach((change, index) => {
-            console.log("Change : ", change, index)
-
             const clone = {...object[change.index]}
             delete clone['__hash__'];
 
-            console.log("New Object Changes : ", newObjectChanges)
             const existingChange = newObjectChanges.find((change) => change.row['__index__'] === clone['__index__'])
 
             if (object[change.index]['__hash__'] !== hash(JSON.stringify(clone))) {
-                console.log("Hash Not Match")
-                console.log("Existing Change : ", existingChange)
                 if (existingChange != null) {
-                    console.log("Update")
-                    const listIndex = newObjectChanges.map(a => a.row).indexOf(existingChange.row);
-                    console.log("Clone : ", clone)
-                    console.log("List Index : ", listIndex)
+                    const listIndex: number = newObjectChanges.map(a => a.row).indexOf(existingChange.row);
+                    const columnIndex: number = newObjectChanges[listIndex].columns.map(a => a.title).indexOf(change.column)
 
-                    console.log("Changes Column :", newObjectChanges[listIndex].row[change.column])
-                    console.log("Clone Column :", clone[change.column])
-
-                    const columnIndex = newObjectChanges[listIndex].columns.map(a => a.title).indexOf(change.column)
                     if (newObjectChanges[listIndex].columns[columnIndex]?.original == clone[change.column]) {
-                        console.log("Delete Column")
-                        const columnListIndex = newObjectChanges[listIndex].columns.map(a => a.title).indexOf(change.column);
-                        newObjectChanges[listIndex].columns.splice(columnListIndex, 1)
-                    } else {
-                        console.log("Update Column")
-                        const columnListIndex = newObjectChanges[listIndex].columns.map(a => a.title).indexOf(change.column);
-                        if (columnListIndex === -1) {
-                            newObjectChanges[listIndex].columns = [...newObjectChanges[listIndex].columns, {
-                                title: change.column,
-                                original: originalObjects[index][change.column]
-                            }]
-                        }
+                        newObjectChanges[listIndex].columns.splice(columnIndex, 1)
+                    } else if (columnIndex === -1) {
+                        newObjectChanges[listIndex].columns = [...newObjectChanges[listIndex].columns, {
+                            title: change.column,
+                            original: originalObjects[index][change.column]
+                        }]
                     }
+
                     newObjectChanges[listIndex].row = clone;
                 } else {
-                    console.log("Insert")
                     newObjectChanges = [...newObjectChanges, {
                         columns: [{
                             title: change.column,
@@ -179,8 +182,6 @@ export const AdjustmentPage = () => {
                     }]
                 }
             } else {
-                console.log("Hash Match")
-                console.log("Delete")
                 newObjectChanges = newObjectChanges.filter((change) => change.row['__index__'] !== clone['__index__'])
             }
         })
@@ -188,12 +189,6 @@ export const AdjustmentPage = () => {
         setChangeList(newObjectChanges);
 
     };
-
-    const simpleHandleContextMenu: any = (_selectedRowIds: Id[], _selectedColIds: Id[], _selectionMode: SelectionMode, menuOptions: MenuOption[]): MenuOption[] => [
-        ...menuOptions,
-        new SetNullMenuOption(handleChanges),
-        new RevertMenuOption(handleChanges, changeList)
-    ];
 
     return (
         <>
@@ -216,7 +211,7 @@ export const AdjustmentPage = () => {
             {objects.length > 0 && (
                 <ReactGrid
                     rows={rows}
-                    columns={columns}
+                    columns={sheetColumns}
                     onCellsChanged={handleChanges}
                     enableRangeSelection={true}
                     enableColumnSelection={true}
