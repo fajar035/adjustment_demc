@@ -50,7 +50,9 @@ export const AdjustmentPage = () => {
     const columns = getColumns();
 
     const handleChanges: any = (changes: CellChange<TextCell>[]) => {
-        setPeople((prevPeople) => applyChangesToRow(changes, prevPeople));
+        const newPeople = [...people];
+        applyChangesToRow(changes, newPeople);
+        setPeople(newPeople);
     };
     return (
         <>
