@@ -8,7 +8,7 @@ export interface Data {
 
 export interface Payload {
     fields: Field[]
-    records: string[]
+    records: string[][]
 }
 
 export interface Field {

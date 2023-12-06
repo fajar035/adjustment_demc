@@ -1,5 +1,5 @@
 import {CellLocation, Id, MenuOption, SelectionMode} from "@silevis/reactgrid";
-import {ChangeItem} from "./ChangeItem.tsx";
+import {ChangeItem} from "./ChangeItem.ts";
 
 export class RevertMenuOption implements MenuOption {
     id: string = "menu-revert";
