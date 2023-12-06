@@ -3,7 +3,7 @@ import {useEffect} from "react";
 import {Cell, CellChange, Column, HeaderCell, Id, MenuOption, ReactGrid, Row, SelectionMode, TextCell} from "@silevis/reactgrid";
 import "@silevis/reactgrid/styles.css";
 import {getPayload} from "./payload.ts";
-import {Field, ServiceResponse} from "./Model.ts";
+import {Field} from "./Model.ts";
 import hash from "object-hash";
 import {SetNullMenuOption} from "./SetNullMenuOption.tsx";
 import {RevertMenuOption} from "./RevertMenuOption.tsx";
@@ -101,63 +101,34 @@ function getContextMenu(changeHandler: (a: any) => void, changeList: ChangeItem[
     ]
 }
 
-function getChangeHandler(cellChanges: CellChange<TextCell>[]): void {
+function getChangeHandler(
+    records: any[],
+    changeList: ChangeItem[],
+    onChanges: (cellChanges: CellChange<TextCell>[], changeList: ChangeItem[]) => void
+): (cellChanges: CellChange<TextCell>[]) => void {
 
-}
-
-export const AdjustmentPage = () => {
-    const [columns, setColumns] = React.useState<Field[]>([])
-
-    const [objects, setObjects] = React.useState<any[]>([]);
-    const [rows, setSheetValues] = React.useState<Row<Cell>[]>([]);
-    const [availableColumns, setAvailableColumns] = React.useState<string[]>([]);
-    const [sheetColumns, setSheetColumns] = React.useState<Column[]>([]);
-    const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
-    const [changeList, setChangeList] = React.useState<ChangeItem[]>([]);
-
-
-    useEffect(() => {
-        getPayload().then((payload) => {
-            setColumns(payload.data.payload.fields)
-            setAvailableColumns(payload.data.payload.fields.map((field) => field.name));
-            setObjects(getObjects(payload.data.payload.fields, payload.data.payload.records));
-        })
-    }, [])
-
-    useEffect(() => {
-        const filteredColumns = selectedColumns.length === 0 ? columns : columns.filter((field) => selectedColumns.includes(field.name));
-        const sheetColumns = getSheetColumns(filteredColumns);
-        const sheetValues = getSheetValues(filteredColumns, objects, changeList);
-
-        setSheetColumns(sheetColumns);
-        setSheetValues(sheetValues);
-    }, [columns, objects, selectedColumns, changeList])
-
-    const handleChanges: any = (changes: CellChange<TextCell>[]) => {
-        const object = [...objects];
-
-        let _changes = changes.map((change) => ({
-            index: change.rowId as number,
-            column: change.columnId as string,
-        }))
-
-        _changes = _changes.filter((change, index, self) =>
-            index === self.findIndex((t) => t.index === change.index && t.column === change.column)
-        )
+    return (cellChanges: CellChange<TextCell>[]) => {
+        const changes: { index: number, column: string }[] = cellChanges
+            .filter((change, index, self) =>
+                index === self.findIndex((t) => t.rowId === change.rowId && t.columnId === change.columnId)
+            ).map((change) => ({
+                index: change.rowId as number,
+                column: change.columnId as string,
+            }))
 
 
         let newObjectChanges = [...changeList];
 
-        const originalObjects = _changes.map((change) => ({...objects[change.index]}))
-        applyChangesToRow(changes, object);
+        const originalObjects = changes.map((change) => ({...records[change.index]}))
+        applyChangesToRow(cellChanges, records);
 
-        _changes.forEach((change, index) => {
-            const clone = {...object[change.index]}
+        changes.forEach((change, index) => {
+            const clone = {...records[change.index]}
             delete clone['__hash__'];
 
             const existingChange = newObjectChanges.find((change) => change.row['__index__'] === clone['__index__'])
 
-            if (object[change.index]['__hash__'] !== hash(JSON.stringify(clone))) {
+            if (records[change.index]['__hash__'] !== hash(JSON.stringify(clone))) {
                 if (existingChange != null) {
                     const listIndex: number = newObjectChanges.map(a => a.row).indexOf(existingChange.row);
                     const columnIndex: number = newObjectChanges[listIndex].columns.map(a => a.title).indexOf(change.column)
@@ -174,10 +145,7 @@ export const AdjustmentPage = () => {
                     newObjectChanges[listIndex].row = clone;
                 } else {
                     newObjectChanges = [...newObjectChanges, {
-                        columns: [{
-                            title: change.column,
-                            original: originalObjects[index][change.column]
-                        }],
+                        columns: [{title: change.column, original: originalObjects[index][change.column]}],
                         row: clone
                     }]
                 }
@@ -185,10 +153,47 @@ export const AdjustmentPage = () => {
                 newObjectChanges = newObjectChanges.filter((change) => change.row['__index__'] !== clone['__index__'])
             }
         })
-        setObjects(object);
-        setChangeList(newObjectChanges);
+        onChanges(cellChanges, newObjectChanges);
+    }
+}
 
-    };
+export const AdjustmentPage = () => {
+    const [columns, setColumns] = React.useState<Field[]>([])
+
+    const [records, setRecords] = React.useState<any[]>([]);
+
+    const [sheetColumns, setSheetColumns] = React.useState<Column[]>([]);
+    const [sheetValues, setSheetValues] = React.useState<Row<Cell>[]>([]);
+
+    const [availableColumns, setAvailableColumns] = React.useState<string[]>([]);
+    const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
+    const [changeList, setChangeList] = React.useState<ChangeItem[]>([]);
+
+
+    useEffect(() => {
+        getPayload().then((payload) => {
+            setColumns(payload.data.payload.fields)
+            setAvailableColumns(payload.data.payload.fields.map((field) => field.name));
+            setRecords(getObjects(payload.data.payload.fields, payload.data.payload.records));
+        })
+    }, [])
+
+    useEffect(() => {
+        const filteredColumns = selectedColumns.length === 0 ? columns : columns.filter((field) => selectedColumns.includes(field.name));
+        const sheetColumns = getSheetColumns(filteredColumns);
+        const sheetValues = getSheetValues(filteredColumns, records, changeList);
+
+        setSheetColumns(sheetColumns);
+        setSheetValues(sheetValues);
+    }, [columns, records, selectedColumns, changeList])
+
+    const changeHandler: any = getChangeHandler(
+        records,
+        changeList,
+        (_cellChanges: CellChange<TextCell>[], changeList: ChangeItem[]) => {
+            setRecords(records);
+            setChangeList(changeList);
+        })
 
     return (
         <>
@@ -208,14 +213,14 @@ export const AdjustmentPage = () => {
                 ))}
             </select>
 
-            {objects.length > 0 && (
+            {records.length > 0 && (
                 <ReactGrid
-                    rows={rows}
+                    rows={sheetValues}
                     columns={sheetColumns}
-                    onCellsChanged={handleChanges}
+                    onCellsChanged={changeHandler}
                     enableRangeSelection={true}
                     enableColumnSelection={true}
-                    onContextMenu={getContextMenu(handleChanges, changeList)}
+                    onContextMenu={getContextMenu(changeHandler, changeList)}
                     stickyTopRows={1}
 
                 />
