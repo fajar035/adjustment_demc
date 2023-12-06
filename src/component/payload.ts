@@ -1,6 +1,7 @@
 import {ServiceResponse} from "./Model.ts";
 
-export const payload : ServiceResponse = JSON.parse(`
+export async function getPayload(): Promise<ServiceResponse> {
+    return JSON.parse(`
 {
   "data": {
     "payload": {
@@ -19112,3 +19113,4 @@ export const payload : ServiceResponse = JSON.parse(`
   }
 }
 `)
+}
