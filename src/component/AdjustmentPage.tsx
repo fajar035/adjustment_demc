@@ -26,22 +26,38 @@ function getColumns(columns: any[]): Column[] {
     return columns.map((column: any) => ({columnId: column.name, width: 150}));
 }
 
-function getRows(columns: any[], records: any[]): Row[] {
+function getSheetRows(columns: any[], records: any[], changeList: ChangeItem[]): Row[] {
     return [
         {
             rowId: "header",
-            cells: columns.map((field) => ({type: "text", text: field.name}))
+            cells: columns.map((field) => ({type: "text", text: field.name, nonEditable: true}))
         },
-        ...records.map<Row>((rows, index: number) => ({
-            rowId: index,
-            cells: columns.map((field) => {
+        ...records.map<Row>((rows, index: number): Row => {
+            const rowChanges: ChangeItem | undefined = changeList.find((change) => change.row['__index__'] === index);
+
+            const cells: TextCell[] = columns.map((field): TextCell => {
                 const value = rows[field.name];
+                const columnChange = rowChanges?.columns.find((column) => column.title === field.name);
+
+                const color: string = value == null ? "lightgray" : "black";
+                let backgroundColor: string | undefined = undefined
+
+                if (columnChange != null) backgroundColor = "blue";
+                else if (rowChanges != null) backgroundColor = "lightblue";
+
                 return {
                     type: "text",
-                    text: value == null ? "" : value.toString()
-                };
+                    text: value == null ? "" : value.toString(),
+                    placeholder: value == null ? "NULL" : value.toString(),
+                    style: {
+                        color: color,
+                        background: backgroundColor
+                    }
+                }
             })
-        }))
+
+            return ({rowId: index, cells: cells})
+        })
     ];
 }
 
@@ -68,7 +84,7 @@ export const AdjustmentPage = () => {
     const [availableColumns, setAvailableColumns] = React.useState<string[]>([]);
     const [columns, setColumns] = React.useState<Column[]>([]);
     const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
-    const [objectChanges, setObjectChanges] = React.useState<ChangeItem[]>([]);
+    const [changeList, setChangeList] = React.useState<ChangeItem[]>([]);
 
 
     useEffect(() => {
@@ -84,16 +100,14 @@ export const AdjustmentPage = () => {
 
         let filteredColumns = payload.data.payload.fields.filter((field) => selectedColumns.includes(field.name));
 
-        if (selectedColumns.length === 0) {
-            filteredColumns = payload.data.payload.fields;
-        }
+        if (selectedColumns.length === 0) filteredColumns = payload.data.payload.fields;
 
         const columns = getColumns(filteredColumns);
-        const rows = getRows(filteredColumns, objects);
+        const rows = getSheetRows(filteredColumns, objects, changeList);
 
         setColumns(columns);
         setRows(rows);
-    }, [objects, selectedColumns])
+    }, [objects, selectedColumns, changeList])
 
     const handleChanges: any = (changes: CellChange<TextCell>[]) => {
         const object = [...objects];
@@ -110,7 +124,7 @@ export const AdjustmentPage = () => {
         )
 
 
-        let newObjectChanges = [...objectChanges];
+        let newObjectChanges = [...changeList];
 
         const originalObjects = _changes.map((change) => ({...objects[change.index]}))
         console.log("_Changes : ", _changes)
@@ -171,20 +185,20 @@ export const AdjustmentPage = () => {
             }
         })
         setObjects(object);
-        setObjectChanges(newObjectChanges);
+        setChangeList(newObjectChanges);
 
     };
 
     const simpleHandleContextMenu: any = (_selectedRowIds: Id[], _selectedColIds: Id[], _selectionMode: SelectionMode, menuOptions: MenuOption[]): MenuOption[] => [
         ...menuOptions,
         new SetNullMenuOption(handleChanges),
-        new RevertMenuOption(handleChanges, objectChanges)
+        new RevertMenuOption(handleChanges, changeList)
     ];
 
     return (
         <>
             <ul>
-                {objectChanges.map((change, index) => (
+                {changeList.map((change, index) => (
                     <li key={index}>{JSON.stringify(change)}</li>
                 ))}
             </ul>
@@ -206,8 +220,9 @@ export const AdjustmentPage = () => {
                     onCellsChanged={handleChanges}
                     enableRangeSelection={true}
                     enableColumnSelection={true}
-                    onContextMenu={getContextMenu(handleChanges, objectChanges)}
+                    onContextMenu={getContextMenu(handleChanges, changeList)}
                     stickyTopRows={1}
+
                 />
             )}
         </>
